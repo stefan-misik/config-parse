@@ -7,6 +7,8 @@
 *.out
 config_parse
 
+# Makefile dependency
+*.d
 
 # Netbeans project files
 nbproject/
