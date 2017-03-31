@@ -1,4 +1,5 @@
-#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
 #include "config_parse.h"
 
 
@@ -6,96 +7,289 @@
 /*                               Private                                      */
 /******************************************************************************/
 
-/* Buffer capacity of a static buffer */
-#define STATIC_BUFFER_CAPACITY ((size_t)-1)
+/* Minimal length of the string buffer */
+#define STRING_BUFFER_MIN_LENGTH 64
 
-/* Minimal capacity of buffers */
-#define CONFIG_BUFFER_MIN_CAPACITY 128
+/* Configuration format definitions */
+#define CONF_COMMENT_CHAR '#'
+#define CONF_NEWLINE_CHAR '\n'
+#define CONF_EQUALS_CHAR  '='
+#define CONF_QUOTE1_CHAR  '"'
+#define CONF_QUOTE2_CHAR  '\''
+#define CONF_ESCAPE_CHAR  '\\'
+
+/* Get the length of the string */
+#define string_buffer_strlen(sb)    \
+    ((size_t)((sb)->length))
 
 /**
- * @brief Initialize config string buffer
- * 
- * @param[out] buff Buffer object to be initialized
+ * @brief State of the parses
  */
-static void config_buffer_init(
-    config_buffer_t * buff
+typedef enum parser_state
+{
+    PARSER_DIVIDER, /** < Inside token divider */
+    PARSER_COMMENT, /** < Inside comment */
+    PARSER_VAR_NAME,
+    PARSER_VAR_VALUE_BASE,
+    PARSER_VAR_VALUE_ESCAPE,
+    PARSER_VAR_VALUE_QUOTES1,
+    PARSER_VAR_VALUE_QUOTES2            
+} parser_state_t;
+
+/**
+ * @brief Structure containing information on the buffer
+ * 
+ */
+typedef struct string_buffer
+{
+    size_t capacity;    /** < allocated capacity of the buffer */
+    size_t length;      /** < Length of the string */
+    char * buffer;      /** < Buffer pointer */
+} string_buffer_t;
+
+
+/**
+ * @brief Initialize the string buffer 
+ * 
+ * @param[out] sb String buffer object to initialize
+ * @return 0 on success
+ */
+int string_buffer_init(
+    string_buffer_t * sb
 )
 {
-    buff->capacity = 0;
-    buff->length = 0;
-    buff->data = NULL;
+    /* Allocate the buffer */
+    sb->buffer = (char *)malloc(sizeof(char) * STRING_BUFFER_MIN_LENGTH);
+    sb->length = 0;
+    
+    /* Set the capacity end return accordingly */
+    if(NULL != sb->buffer)
+    {
+        sb->capacity = STRING_BUFFER_MIN_LENGTH;
+        return 0;
+    }
+    else
+    {
+        sb->capacity = 0;
+        return -1;
+    }
 }
 
 /**
- * @brief De-initialize config buffer
+ * @brief De-initialize the string buffer
  * 
- * @param[in,out] buff Buffer object to be de-initialized
+ * @param[in] sb String buffer object to de-initialize
  */
-static void config_buffer_deinit(
-    config_buffer_t * buff
+void string_buffer_deinit(
+    string_buffer_t * sb
 )
 {
-    /* Free buffer */
-    if(NULL != buff->data)
+    /* Free the buffer */
+    if(NULL != sb->buffer)
     {
-        free(buff->data);
+        free(sb->buffer);
+        sb->buffer = NULL;
+    }
+}
+
+/**
+ * @brief Ensure there is enough space in the buffer for the string of specified
+ *        length
+ * 
+ * @param[in,out] sb String buffer object
+ * @param length Length of the string
+ * @return 0 on success
+ */
+int string_buffer_ensure(
+    string_buffer_t * sb,
+    size_t length
+)
+{
+    size_t required;
+    
+    /* Calculate required size */
+    required = sb->length + length + 1;
+    /* Check the buffer capacity */
+    if(required > sb->capacity)
+    {
+        size_t new_capacity;
+        void * new_buffer;
+        
+        /* Calculate new capacity */
+        new_capacity = sb->capacity * 2;
+        if(new_capacity < required)
+            new_capacity = required;
+        
+        /* Re-allocate buffer */
+        new_buffer = realloc((void *)sb->buffer, new_capacity);
+        if(NULL == new_buffer)
+            return -1;
+        /* Assign new buffer */
+        sb->buffer = (char *)new_buffer;
+        sb->capacity = new_capacity;
     }
     
-    /* Zero the fields */
-    buff->capacity = 0;
-    buff->length = 0;
-    buff->data = NULL;
+    return 0;
 }
 
 /**
- * @brief Get the next character of a configuration
+ * @brief Push character to the buffer
  * 
- * @param[in,out] cp Config parse object
- * @return The next character from configuration, or EOF
+ * @param[in,out] sb String buffer object
+ * @param c Character to push
+ * @return 0 on success
  */
-static int config_parse_getc(
-    config_parse_t * cp
+int string_buffer_pushc(
+    string_buffer_t * sb,
+    char c
 )
 {
-    /* If at the end of the buffer */
-    if(cp->buffer_pos >= cp->buffer.length)
+    /* Ensure size of the buffer */
+    if(0 != string_buffer_ensure(sb, sizeof(c)))
+        return -1;
+    
+    /* Add character */
+    sb->buffer[sb->length++] = c;
+    return 0;
+}
+
+/**
+ * @brief Get the string from the buffer and reset buffer object
+ * 
+ * @param[in,out] sb String buffer object
+ * @return String contained in the buffer. Do not modify this string
+ */
+const char * string_buffer_flush(
+    string_buffer_t * sb
+)
+{
+    sb->buffer[sb->length] = '\0';
+    sb->length = 0;
+    return sb->buffer;
+}
+
+/**
+ * 
+ * @param fd
+ * @param var_name
+ * @param var_value
+ * @return 
+ */
+config_parse_res_t config_parse_get(
+    FILE * fd,
+    string_buffer_t * var_name,
+    string_buffer_t * var_value
+)
+{
+    int c;
+    parser_state_t state = PARSER_DIVIDER;
+    
+    while((c = fgetc(fd)) != EOF)
     {
-        /* If possible read another data from the file */
-        if(NULL != cp->source)
+        switch(state)
         {
-            cp->buffer.length = fread(cp->buffer.data, sizeof(char),
-                cp->buffer.capacity, cp->source);
-            cp->buffer_pos = 0;
-            
-            /* If no new data were read, return EOF */
-            if(0 == cp->buffer.length)
-                return EOF;
+            /* token divider */
+            case PARSER_DIVIDER:
+                if(isalpha(c))
+                {
+                    string_buffer_pushc(var_name, c);
+                    state = PARSER_VAR_NAME;
+                }
+                else if(CONF_COMMENT_CHAR == c)
+                {
+                    state = PARSER_COMMENT;
+                }
+                else if(!isspace(c))
+                {
+                    /* Syntax error */
+                    return CONFIG_PARSE_SYNTAX;
+                }
+                break;
+
+            /* Comment */
+            case PARSER_COMMENT:
+                if(CONF_NEWLINE_CHAR == c)
+                    state = PARSER_DIVIDER;
+                break;
+
+            /* Variable name */
+            case PARSER_VAR_NAME:
+                if(isalnum(c))
+                {
+                    string_buffer_pushc(var_name, c);
+                }
+                else if(CONF_EQUALS_CHAR == c)
+                {
+                    state = PARSER_VAR_VALUE_BASE;
+                }
+                else
+                {
+                    return CONFIG_PARSE_SYNTAX;
+                }
+                break;
+
+            /* Variable value - base */
+            case PARSER_VAR_VALUE_BASE:
+                if(CONF_QUOTE1_CHAR == c)
+                {
+                    state = PARSER_VAR_VALUE_QUOTES1;
+                }
+                else if(CONF_QUOTE2_CHAR == c)
+                {
+                    state = PARSER_VAR_VALUE_QUOTES2;
+                }
+                else if(CONF_ESCAPE_CHAR == c)
+                {
+                    state = PARSER_VAR_VALUE_ESCAPE;
+                }
+                else if(isspace(c))
+                {
+                    state = PARSER_DIVIDER;
+                    return CONFIG_PARSE_OK;
+                }
+                else
+                {
+                    string_buffer_pushc(var_value, c);
+                }
+                break;
+                
+            /* Variable value - quotes 1 */
+            case PARSER_VAR_VALUE_QUOTES1:
+                if(CONF_QUOTE1_CHAR == c)
+                {
+                    state = PARSER_VAR_VALUE_BASE;
+                }
+                else
+                {
+                    string_buffer_pushc(var_value, c);
+                }
+                break;
+
+            /* Variable value - quotes 2 */
+            case PARSER_VAR_VALUE_QUOTES2:
+                if(CONF_QUOTE2_CHAR == c)
+                {
+                    state = PARSER_VAR_VALUE_BASE;
+                }
+                else
+                {
+                    string_buffer_pushc(var_value, c);
+                }
+                break;
+
+            /* Escaped character */
+            case PARSER_VAR_VALUE_ESCAPE:
+                if(CONF_NEWLINE_CHAR != c)
+                {
+                    string_buffer_pushc(var_value, c);
+                }
+                state = PARSER_VAR_VALUE_BASE;
+                break;
         }
-        else
-            return EOF;
+        
     }
     
-    /* Get the next character */       
-    return cp->buffer.data[cp->buffer_pos ++];
-}
-
-/**
- * @brief Initialize config parse object
- * 
- * @param[out] cp Config parse object to be initialized
- */
-static void config_parse_init(
-    config_parse_t * cp
-)
-{
-    /* Initialize buffers */
-    config_buffer_init(&(cp->variable_name));
-    config_buffer_init(&(cp->value));
-    config_buffer_init(&(cp->buffer));
-    
-    /* Initialize other fields */
-    cp->buffer_pos = 0;
-    cp->source = NULL;
+    return CONFIG_PARSE_FILE_ERROR;
 }
 
 /******************************************************************************/
@@ -103,52 +297,50 @@ static void config_parse_init(
 /******************************************************************************/
 
 /******************************************************************************/
-int config_parse_file_init(
-    config_parse_t * cp,
-    const char * filename
+config_parse_res_t config_parse(
+    FILE * fd,
+    int overwrite
 )
 {
-    /* Do common initialization */
-    config_parse_init(cp);
-
-    return -1;
-}
-
-/******************************************************************************/
-int config_parse_string_init(
-    config_parse_t * cp,
-    const char * config,
-    size_t config_length
-)
-{
-    /* Do common initialization */
-    config_parse_init(cp);
-
-    /* Indicate the configuration the buffer is static */
-    cp->buffer.capacity = STATIC_BUFFER_CAPACITY;
-    /* Load passed string into configuration buffer */
-    cp->buffer.length = config_length;
-    cp->buffer.data = (char *)config;
-
-    return -1;
-}
-
-/******************************************************************************/
-void config_parse_deinit(
-    config_parse_t * cp
-)
-{
-    /* Destroy buffers */
-    config_buffer_deinit(&(cp->variable_name));
-    config_buffer_deinit(&(cp->value));
-
-    if(STATIC_BUFFER_CAPACITY != cp->buffer.capacity)
-        config_buffer_deinit(&(cp->buffer));
-
-    /* Close config file */
-    if(NULL != cp->source)
+    string_buffer_t var_name, var_value;
+    int cont;
+    config_parse_res_t res = CONFIG_PARSE_OK;
+    
+    /* initialize the string buffers */
+    if(0 == string_buffer_init(&var_name) &&
+        0 == string_buffer_init(&var_value))
     {
-        fclose(cp->source);
-        cp->source = NULL;
     }
+    else
+        res = CONFIG_PARSE_MEMORY_ERROR;
+    
+    cont = 1;
+    while(cont)
+    {
+        res = config_parse_get(fd, &var_name, &var_value);
+        switch(res)
+        {
+            case CONFIG_PARSE_OK:
+                if(0 != setenv(string_buffer_flush(&var_name),
+                    string_buffer_flush(&var_value), overwrite))
+                {
+                    res = CONFIG_PARSE_SETENV_ERROR;
+                    cont = 0;
+                }
+                break;
+            
+            case CONFIG_PARSE_FILE_ERROR:
+                res = CONFIG_PARSE_OK;
+            default:
+                cont = 0;                
+                break;                
+        }
+        
+    }
+
+    /* Free string buffers */
+    string_buffer_deinit(&var_name);
+    string_buffer_deinit(&var_value);
+
+    return res;
 }
