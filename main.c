@@ -19,7 +19,7 @@ int main(
         return EXIT_FAILURE;
     }
     
-    conf_fd = fopen("test.conf", "r");
+    conf_fd = fopen(argv[1], "r");
     
     if(NULL != conf_fd)
     {
@@ -35,8 +35,12 @@ int main(
             printf("Error no. %d while processing file \n", res);
         }
         
-        fclose(conf_fd);     
-        
+        fclose(conf_fd);
+    }
+    else
+    {
+        printf("Could not open the specified file.\n");
+        return EXIT_FAILURE;
     }
     
     return EXIT_SUCCESS;

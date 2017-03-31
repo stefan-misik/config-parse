@@ -331,9 +331,11 @@ config_parse_res_t config_parse(
                     cont = 0;
                 }
                 break;
-            
+
+            /* Handle the EoF */
             case CONFIG_PARSE_FILE_ERROR:
                 res = CONFIG_PARSE_OK;
+            /* Return error otherwise */
             default:
                 cont = 0;                
                 break;                

@@ -20,6 +20,7 @@ typedef enum config_parse_res
  * @brief Begin parsing of the passed file
  * 
  * Function parses bash-like variables definitions inside configuration file
+ * and stores them as environment variables
  * 
  * @param[in,out] fd File to psrse
  * @param overwrite Overwrite existing environment variables
