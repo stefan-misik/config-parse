@@ -193,7 +193,8 @@ config_parse_res_t config_parse_get(
             case PARSER_DIVIDER:
                 if(isalpha(c))
                 {
-                    string_buffer_pushc(var_name, c);
+                    if(0 != string_buffer_pushc(var_name, c))
+                        return CONFIG_PARSE_MEMORY_ERROR;
                     state = PARSER_VAR_NAME;
                 }
                 else if(CONF_COMMENT_CHAR == c)
@@ -217,7 +218,8 @@ config_parse_res_t config_parse_get(
             case PARSER_VAR_NAME:
                 if(isalnum(c))
                 {
-                    string_buffer_pushc(var_name, c);
+                    if(0 != string_buffer_pushc(var_name, c))
+                        return CONFIG_PARSE_MEMORY_ERROR;
                 }
                 else if(CONF_EQUALS_CHAR == c)
                 {
@@ -250,7 +252,8 @@ config_parse_res_t config_parse_get(
                 }
                 else
                 {
-                    string_buffer_pushc(var_value, c);
+                    if(0 != string_buffer_pushc(var_value, c))
+                        return CONFIG_PARSE_MEMORY_ERROR;
                 }
                 break;
                 
@@ -262,7 +265,8 @@ config_parse_res_t config_parse_get(
                 }
                 else
                 {
-                    string_buffer_pushc(var_value, c);
+                    if(0 != string_buffer_pushc(var_value, c))
+                        return CONFIG_PARSE_MEMORY_ERROR;
                 }
                 break;
 
@@ -274,7 +278,8 @@ config_parse_res_t config_parse_get(
                 }
                 else
                 {
-                    string_buffer_pushc(var_value, c);
+                    if(0 != string_buffer_pushc(var_value, c))
+                        return CONFIG_PARSE_MEMORY_ERROR;
                 }
                 break;
 
@@ -282,7 +287,8 @@ config_parse_res_t config_parse_get(
             case PARSER_VAR_VALUE_ESCAPE:
                 if(CONF_NEWLINE_CHAR != c)
                 {
-                    string_buffer_pushc(var_value, c);
+                    if(0 != string_buffer_pushc(var_value, c))
+                        return CONFIG_PARSE_MEMORY_ERROR;
                 }
                 state = PARSER_VAR_VALUE_BASE;
                 break;

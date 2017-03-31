@@ -9,7 +9,7 @@
 typedef enum config_parse_res
 {
     CONFIG_PARSE_OK = 0,        /** < Configuration parsing successfull */
-    CONFIG_PARSE_MEMORY_ERROR,  /** < Memory error while processing file */
+    CONFIG_PARSE_MEMORY_ERROR,  /** < Not enough memory to process file */
     CONFIG_PARSE_SYNTAX,        /** < Config file syntax error */
     CONFIG_PARSE_SETENV_ERROR,  /** < Error during setting a environment
                                  *    variable */
