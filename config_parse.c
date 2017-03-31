@@ -27,13 +27,13 @@
  */
 typedef enum parser_state
 {
-    PARSER_DIVIDER, /** < Inside token divider */
-    PARSER_COMMENT, /** < Inside comment */
-    PARSER_VAR_NAME,
-    PARSER_VAR_VALUE_BASE,
-    PARSER_VAR_VALUE_ESCAPE,
-    PARSER_VAR_VALUE_QUOTES1,
-    PARSER_VAR_VALUE_QUOTES2            
+    PARSER_DIVIDER,            /** < Inside token divider */
+    PARSER_COMMENT,            /** < Inside comment */
+    PARSER_VAR_NAME,           /** < Inside variable name */
+    PARSER_VAR_VALUE_BASE,     /** < Inside variable value, base type */
+    PARSER_VAR_VALUE_ESCAPE,   /** < Inside variable value, escaped character */
+    PARSER_VAR_VALUE_QUOTES1,  /** < Inside variable name, inside quotes 1 */
+    PARSER_VAR_VALUE_QUOTES2   /** < Inside variable naem, inside quotes 2 */
 } parser_state_t;
 
 /**
@@ -169,11 +169,12 @@ const char * string_buffer_flush(
 }
 
 /**
+ * @brief Parse single variable name, value pair and return
  * 
- * @param fd
- * @param var_name
- * @param var_value
- * @return 
+ * @param fd File to parse from
+ * @param var_name String buffer which is to obtain variable name
+ * @param var_value String buffer which is to obtain variable name
+ * @return see ::config_parse_res_t, CONFIG_PARSE_FILE_ERROR means EoF
  */
 config_parse_res_t config_parse_get(
     FILE * fd,
@@ -317,10 +318,12 @@ config_parse_res_t config_parse(
     cont = 1;
     while(cont)
     {
+        /* Try to decode another variable */
         res = config_parse_get(fd, &var_name, &var_value);
         switch(res)
         {
             case CONFIG_PARSE_OK:
+                /* Set environment variable */
                 if(0 != setenv(string_buffer_flush(&var_name),
                     string_buffer_flush(&var_value), overwrite))
                 {

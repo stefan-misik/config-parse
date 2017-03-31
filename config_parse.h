@@ -24,7 +24,7 @@ typedef enum config_parse_res
  * @param[in,out] fd File to psrse
  * @param overwrite Overwrite existing environment variables
  * 
- * @return See config_parse_res_t
+ * @return See ::config_parse_res_t
  */
 config_parse_res_t config_parse(
     FILE * fd,
