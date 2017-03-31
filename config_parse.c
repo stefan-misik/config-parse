@@ -317,36 +317,37 @@ config_parse_res_t config_parse(
     if(0 == string_buffer_init(&var_name) &&
         0 == string_buffer_init(&var_value))
     {
+        cont = 1;
+        while(cont)
+        {
+            /* Try to decode another variable */
+            res = config_parse_get(fd, &var_name, &var_value);
+            switch(res)
+            {
+                case CONFIG_PARSE_OK:
+                    /* Set environment variable */
+                    if(0 != setenv(string_buffer_flush(&var_name),
+                        string_buffer_flush(&var_value), overwrite))
+                    {
+                        res = CONFIG_PARSE_SETENV_ERROR;
+                        cont = 0;
+                    }
+                    break;
+
+                /* Handle the EoF */
+                case CONFIG_PARSE_FILE_ERROR:
+                    res = CONFIG_PARSE_OK;
+                /* Return error otherwise */
+                default:
+                    cont = 0;                
+                    break;                
+            }
+
+        }
     }
     else
-        res = CONFIG_PARSE_MEMORY_ERROR;
-    
-    cont = 1;
-    while(cont)
     {
-        /* Try to decode another variable */
-        res = config_parse_get(fd, &var_name, &var_value);
-        switch(res)
-        {
-            case CONFIG_PARSE_OK:
-                /* Set environment variable */
-                if(0 != setenv(string_buffer_flush(&var_name),
-                    string_buffer_flush(&var_value), overwrite))
-                {
-                    res = CONFIG_PARSE_SETENV_ERROR;
-                    cont = 0;
-                }
-                break;
-
-            /* Handle the EoF */
-            case CONFIG_PARSE_FILE_ERROR:
-                res = CONFIG_PARSE_OK;
-            /* Return error otherwise */
-            default:
-                cont = 0;                
-                break;                
-        }
-        
+        res = CONFIG_PARSE_MEMORY_ERROR;
     }
 
     /* Free string buffers */
