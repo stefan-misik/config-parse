@@ -1,5 +1,6 @@
 #include "config_parse.h"
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 
 extern char **environ;
@@ -15,11 +16,18 @@ int main(
     
     if(argc != 2)
     {
-        printf("usage: config_parse file\n");
+        printf("usage: config_parse file ('-' for stdin)\n");
         return EXIT_FAILURE;
     }
     
-    conf_fd = fopen(argv[1], "r");
+    if(0 == strcmp("-", argv[1]))
+    {
+        conf_fd = stdin;
+    }
+    else
+    {
+        conf_fd = fopen(argv[1], "r");
+    }
     
     if(NULL != conf_fd)
     {
